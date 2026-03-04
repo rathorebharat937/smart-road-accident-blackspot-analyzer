@@ -4,7 +4,7 @@ An AI-powered intelligent system for identifying, analyzing, and predicting road
 
 ## 🎯 Project Overview
 
-This innovative hackathon project leverages data science and web technologies to:
+This innovative  project leverages data science and web technologies to:
 - **Identify high-risk accident zones** using ML algorithms
 - **Provide real-time risk assessment** for any location
 - **Visualize accident patterns** on interactive maps
@@ -275,21 +275,3 @@ We welcome contributions! Please follow these steps:
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 👥 Team
-
-- **Bharat Rathore** - Lead Developer & ML Engineer
-- *Hackathon Project - Innovative Solutions for Road Safety*
-
-## 📞 Contact
-
-For any inquiries or collaboration opportunities:
-- **Email**: [your-email@example.com]
-- **GitHub**: [@rathorebharat937]
-
----
-
-**🚦 Making Roads Safer Through Data Science & Technology**
