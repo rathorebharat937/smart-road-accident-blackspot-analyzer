@@ -1,21 +1,110 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>🚦 Smart Road Safety Analytics</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚦 Smart Road Safety Analytics Dashboard</title>
 
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <link rel="stylesheet" href="style.css">
 
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <!-- Mapbox GL CSS -->
+    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" />
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<header class="dashboard-header">
+    <h1>🚦 Smart Road Accident Blackspot Analyzer</h1>
+    <p class="subtitle">AI-Driven Risk Analytics & Intelligence System</p>
+</header>
 
-<h1>🚦 Smart Road Accident Blackspot Analyzer</h1>
-<p class="subtitle">AI-Driven Risk & Cause Analysis System</p>
+<main class="dashboard-container">
+    <!-- Analytics Sidebar -->
+    <aside class="analytics-sidebar">
+        <div class="analytics-card">
+            <h3>📊 Analytics Overview</h3>
+            <div class="metric">
+                <span class="metric-value" id="totalBlackspots">0</span>
+                <span class="metric-label">Total Blackspots</span>
+            </div>
+            <div class="metric">
+                <span class="metric-value high-risk" id="highRiskZones">0</span>
+                <span class="metric-label">High Risk Zones</span>
+            </div>
+            <div class="metric">
+                <span class="metric-value medium-risk" id="mediumRiskZones">0</span>
+                <span class="metric-label">Medium Risk Zones</span>
+            </div>
+            <div class="metric">
+                <span class="metric-value low-risk" id="lowRiskZones">0</span>
+                <span class="metric-label">Low Risk Zones</span>
+            </div>
+        </div>
 
-<div id="map"></div>
+        <div class="chart-container">
+            <h3>📈 Risk Distribution</h3>
+            <canvas id="riskChart"></canvas>
+        </div>
+    </aside>
 
+    <!-- Map Container -->
+    <section class="map-section">
+        <!-- Map View Controls -->
+        <div class="map-header-controls">
+            <!-- View Toggle Buttons -->
+            <div class="map-view-toggle">
+                <button class="view-toggle-btn active" id="view2d" data-view="2d">
+                    🗺️ 2D Map
+                </button>
+                <button class="view-toggle-btn" id="view3d" data-view="3d">
+                    🌐 3D Map
+                </button>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="map-action-controls">
+                <button class="action-btn" id="resetView" title="Reset to India View">
+                    🎯 Reset View
+                </button>
+                <button class="control-btn" id="toggleHeatmap" title="Toggle Heatmap">
+                    🔥 Heatmap
+                </button>
+                <button class="control-btn" id="toggleMarkers" title="Toggle Markers">
+                    📍 Markers
+                </button>
+            </div>
+        </div>
+
+        <!-- Map Wrapper -->
+        <div class="map-wrapper">
+            <!-- 2D Map Container -->
+            <div class="map-container active" id="map2d">
+                <div id="map"></div>
+            </div>
+
+            <!-- 3D Map Container -->
+            <div class="map-container" id="map3d">
+                <div id="map3d-container"></div>
+            </div>
+        </div>
+    </section>
+</main>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<!-- Leaflet Heat Plugin -->
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+
+<!-- Mapbox GL JS -->
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+
+<!-- Custom Script -->
 <script src="script.js"></script>
-
 </body>
 </html>
