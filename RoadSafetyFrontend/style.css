@@ -669,3 +669,247 @@ body {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* Risk Analysis Animations */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes risk-pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 20px rgba(231, 76, 60, 0.6), 0 2px 8px rgba(0,0,0,0.4);
+    }
+    50% {
+        transform: scale(1.1);
+        box-shadow: 0 0 30px rgba(231, 76, 60, 0.8), 0 2px 12px rgba(0,0,0,0.6);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 20px rgba(231, 76, 60, 0.6), 0 2px 8px rgba(0,0,0,0.4);
+    }
+}
+
+/* Risk Zone Styles */
+.risk-zone-circle {
+    transition: all 0.3s ease-in-out;
+}
+
+.risk-zone-circle:hover {
+    fill-opacity: 0.3 !important;
+    stroke-width: 3px !important;
+}
+
+/* Risk Popup Styles */
+.risk-analysis-popup {
+    backdrop-filter: blur(10px);
+}
+
+.risk-analysis-popup .leaflet-popup-content-wrapper {
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    border: none;
+}
+
+.risk-analysis-popup .leaflet-popup-content {
+    margin: 0;
+    border-radius: 12px;
+}
+
+.risk-analysis-popup-3d {
+    border-radius: 12px !important;
+}
+
+/* User Location Risk Marker */
+.user-location-risk-marker {
+    z-index: 1000 !important;
+}
+
+/* Mapbox Popup Container Fix */
+.mapboxgl-popup {
+    max-width: 280px !important;
+}
+
+.mapboxgl-popup-content {
+    padding: 0 !important;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+/* Risk Analysis Popup Layout */
+.ws-popup {
+    width: 100%;
+    max-width: 260px;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Header Section */
+.ws-header {
+    display: flex;
+    gap: 10px;
+    padding: 12px;
+    align-items: center;
+    background: white;
+}
+
+.ws-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.ws-header p {
+    margin: 2px 0 0 0;
+    font-size: 12px;
+    color: #7f8c8d;
+}
+
+.ws-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    flex-shrink: 0;
+}
+
+/* Body Section */
+.ws-body {
+    padding: 16px;
+    background: #eaf7ee;
+    border-left: 4px solid #27ae60;
+    animation: slideIn 0.4s ease-out;
+}
+
+/* Row Layout Fix */
+.ws-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.ws-row > * {
+    min-width: 0;
+}
+
+/* Badge */
+.ws-badge {
+    background: #27ae60;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ARI Score */
+.ws-ari {
+    text-align: right;
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.ws-ari-value {
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.ws-ari-label {
+    font-size: 11px;
+    color: #7f8c8d;
+    margin-top: 2px;
+}
+
+/* Divider */
+.ws-divider {
+    height: 1px;
+    background: rgba(0,0,0,0.1);
+    margin: 12px 0;
+}
+
+/* Cause Section */
+.ws-cause {
+    margin-top: 12px;
+}
+
+.ws-cause strong {
+    font-size: 13px;
+    color: #2c3e50;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.ws-cause p {
+    margin: 0;
+    font-size: 14px;
+    color: #34495e;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+/* Footer */
+.ws-footer {
+    padding: 12px;
+    background: #f8f9fa;
+    font-size: 12px;
+    color: #6c757d;
+    text-align: center;
+    border-top: 1px solid #e9ecef;
+}
+
+.ws-footer strong {
+    color: #495057;
+}
+
+/* Note */
+.ws-note {
+    padding: 8px 12px;
+    text-align: center;
+    font-size: 11px;
+    color: #95a5a6;
+    font-style: italic;
+    background: white;
+}
+
+/* Responsive adjustments */
+@media (max-width: 300px) {
+    .ws-popup {
+        max-width: 240px;
+    }
+    
+    .ws-header {
+        padding: 10px;
+    }
+    
+    .ws-body {
+        padding: 12px;
+    }
+    
+    .ws-badge {
+        font-size: 11px;
+        padding: 4px 8px;
+    }
+    
+    .ws-ari-value {
+        font-size: 16px;
+    }
+}

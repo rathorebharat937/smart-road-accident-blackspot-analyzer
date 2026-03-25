@@ -10,6 +10,7 @@ let markersVisible = true;
 let currentView = '2d';
 let mapboxMarkers = [];
 let isMap3dInitialized = false;
+let userLocationMarker = null; // Marker for user's current location
 
 // India center coordinates
 const INDIA_CENTER = [22.9734, 78.6569];
@@ -161,6 +162,7 @@ function setupEventListeners() {
     document.getElementById('resetView').addEventListener('click', resetMapView);
     document.getElementById('toggleHeatmap').addEventListener('click', toggleHeatmap);
     document.getElementById('toggleMarkers').addEventListener('click', toggleMarkers);
+    document.getElementById('useMyLocation').addEventListener('click', useMyLocation);
 
     // Add lighting toggle button if it exists
     const lightingBtn = document.getElementById('toggleLighting');
@@ -172,14 +174,24 @@ function setupEventListeners() {
 // Fetch Data and Process
 function fetchAndProcessData() {
     fetch("http://localhost:8080/api/blackspots")
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
+            if (!Array.isArray(data) || data.length === 0) {
+                throw new Error("No data received from backend");
+            }
             blackspotsData = data;
             processLoadedData(data);
         })
         .catch(error => {
             console.error("Error fetching data:", error);
+            blackspotsData = []; // Clear any existing data
             showErrorMessage();
+            // Don't process any data when backend fails
         });
 }
 
@@ -894,24 +906,515 @@ function toggleMarkers() {
     markersVisible = !markersVisible;
 }
 
+// Use My Location - Geolocation functionality
+function useMyLocation() {
+    const btn = document.getElementById('useMyLocation');
+    
+    // Check if geolocation is supported
+    if (!navigator.geolocation) {
+        showLocationError('Geolocation is not supported by your browser');
+        return;
+    }
+
+    // Show loading state
+    btn.disabled = true;
+    btn.innerHTML = '🔄 Getting Location...';
+    btn.style.opacity = '0.7';
+
+    // Get current position
+    navigator.geolocation.getCurrentPosition(
+        // Success callback
+        (position) => {
+            const { latitude, longitude, accuracy } = position.coords;
+            
+            // Restore button state
+            btn.disabled = false;
+            btn.innerHTML = '📍 Use My Location';
+            btn.style.opacity = '1';
+
+            // Center map to user location
+            centerMapToLocation(latitude, longitude);
+            
+            // Add user location marker with risk assessment
+            addUserLocationMarker(latitude, longitude, accuracy);
+            
+            console.log(`Location found: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (accuracy: ${accuracy.toFixed(0)}m)`);
+        },
+        // Error callback
+        (error) => {
+            // Restore button state
+            btn.disabled = false;
+            btn.innerHTML = '📍 Use My Location';
+            btn.style.opacity = '1';
+
+            // Handle different error types
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    showLocationError('Location access denied. Please enable location permissions in your browser settings.');
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    showLocationError('Location information is unavailable. Please check your GPS or network connection.');
+                    break;
+                case error.TIMEOUT:
+                    showLocationError('Location request timed out. Please try again.');
+                    break;
+                default:
+                    showLocationError('An unknown error occurred while getting your location.');
+                    break;
+            }
+        },
+        // Options
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 300000 // 5 minutes cache
+        }
+    );
+}
+
+// Center map to user location
+function centerMapToLocation(latitude, longitude) {
+    if (currentView === '2d' && map2d) {
+        map2d.setView([latitude, longitude], 15);
+    } else if (currentView === '3d' && map3d && isMap3dInitialized) {
+        map3d.flyTo({
+            center: [longitude, latitude],
+            zoom: 15,
+            speed: 2,
+            curve: 1.4,
+            easing: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+        });
+    }
+}
+
+// Add user location marker with risk analysis
+function addUserLocationMarker(latitude, longitude, accuracy) {
+    // Remove existing user location marker
+    if (userLocationMarker) {
+        if (currentView === '2d' && map2d) {
+            if (userLocationMarker.accuracyCircle) map2d.removeLayer(userLocationMarker.accuracyCircle);
+            if (userLocationMarker.riskZone) map2d.removeLayer(userLocationMarker.riskZone);
+            map2d.removeLayer(userLocationMarker);
+        } else if (currentView === '3d' && userLocationMarker.remove) {
+            userLocationMarker.remove();
+        }
+    }
+
+    // Fetch risk assessment from backend
+    fetchRiskAssessment(latitude, longitude)
+        .then(riskData => {
+            if (currentView === '2d' && map2d) {
+                addUserLocationMarker2D(latitude, longitude, accuracy, riskData);
+            } else if (currentView === '3d' && map3d && isMap3dInitialized) {
+                addUserLocationMarker3D(latitude, longitude, accuracy, riskData);
+            }
+        })
+        .catch(error => {
+            console.warn('Risk assessment failed, showing fallback:', error);
+            // Fallback to risk unavailable message
+            if (currentView === '2d' && map2d) {
+                addUserLocationMarker2D(latitude, longitude, accuracy, null);
+            } else if (currentView === '3d' && map3d && isMap3dInitialized) {
+                addUserLocationMarker3D(latitude, longitude, accuracy, null);
+            }
+        });
+}
+
+// Fetch risk assessment from backend API
+async function fetchRiskAssessment(latitude, longitude) {
+    try {
+        const response = await fetch(`http://localhost:8080/api/risk?lat=${latitude}&lon=${longitude}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data) {
+            return {
+                ari: data.ari || 0,
+                riskLevel: data.riskLevel || 'LOW',
+                cause: getPrimaryRiskCause(data) || 'Unknown risk factors'
+            };
+        } else {
+            return null; // No data found for this location
+        }
+    } catch (error) {
+        console.error('Error fetching risk assessment:', error);
+        return null;
+    }
+}
+
+// Add user location marker for 2D map with risk visualization
+function addUserLocationMarker2D(latitude, longitude, accuracy, riskData) {
+    // Always provide risk data (fallback if null)
+    if (!riskData) {
+        riskData = {
+            ari: 10,
+            riskLevel: 'LOW',
+            cause: 'No accident-prone zones detected nearby'
+        };
+    }
+    
+    const riskConfig = getRiskConfig(riskData.riskLevel);
+    
+    // Create accuracy circle (subtle, GPS precision)
+    const accuracyCircle = L.circle([latitude, longitude], {
+        radius: accuracy,
+        fillColor: '#4285F4',
+        fillOpacity: 0.05,
+        color: '#4285F4',
+        weight: 1,
+        opacity: 0.3
+    });
+
+    // Always create risk zone overlay (safe zone for fallback)
+    const zoneRadius = Math.max(100, Math.min(300, riskData.ari * 3)); // Scale with ARI
+    const riskZone = L.circle([latitude, longitude], {
+        radius: zoneRadius,
+        fillColor: riskConfig.color,
+        fillOpacity: riskData.riskLevel === 'LOW' && riskData.ari === 10 ? 0.1 : 0.2, // Lighter for safe zone
+        color: riskConfig.color,
+        weight: riskData.riskLevel === 'LOW' && riskData.ari === 10 ? 1 : 2, // Thinner for safe zone
+        opacity: riskData.riskLevel === 'LOW' && riskData.ari === 10 ? 0.4 : 0.6, // More subtle for safe zone
+        className: 'risk-zone-circle'
+    });
+
+    // Add glowing effect for high risk only
+    if (riskData.riskLevel === 'HIGH') {
+        addGlowEffect(riskZone);
+    }
+
+    // Create user location marker with risk-based color
+    const userIcon = L.divIcon({
+        className: 'user-location-risk-marker',
+        html: `
+            <div style="
+                background: ${riskConfig.color}; 
+                width: 24px; 
+                height: 24px; 
+                border-radius: 50%; 
+                border: 3px solid white; 
+                box-shadow: ${riskData.riskLevel === 'HIGH' ? '0 0 20px ' + riskConfig.color + ', 0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.4)'};
+                z-index: 1000;
+                animation: ${riskData.riskLevel === 'HIGH' ? 'risk-pulse 2s infinite' : 'none'};
+            "></div>
+        `,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+    });
+
+    userLocationMarker = L.marker([latitude, longitude], { icon: userIcon });
+
+    // Create risk analysis popup
+    const popupContent = createRiskPopupContent(riskData);
+    userLocationMarker.bindPopup(popupContent, {
+        maxWidth: 320,
+        className: 'risk-analysis-popup',
+        autoPan: true
+    }).openPopup();
+
+    // Add elements to map with smooth animations
+    accuracyCircle.addTo(map2d);
+    if (riskZone) {
+        riskZone.addTo(map2d);
+    }
+    userLocationMarker.addTo(map2d);
+
+    // Store references for cleanup
+    userLocationMarker.accuracyCircle = accuracyCircle;
+    userLocationMarker.riskZone = riskZone;
+
+    // Smooth zoom to show risk area
+    setTimeout(() => {
+        map2d.setView([latitude, longitude], 15, {
+            animate: true,
+            duration: 1
+        });
+    }, 300);
+}
+
+// Add user location marker for 3D map with risk visualization
+function addUserLocationMarker3D(latitude, longitude, accuracy, riskData) {
+    // Always provide risk data (fallback if null)
+    if (!riskData) {
+        riskData = {
+            ari: 10,
+            riskLevel: 'LOW',
+            cause: 'No accident-prone zones detected nearby'
+        };
+    }
+    
+    const riskConfig = getRiskConfig(riskData.riskLevel);
+    
+    // Create Mapbox marker with risk-based color and scale
+    const markerScale = riskData.riskLevel === 'HIGH' ? 1.6 : riskData.riskLevel === 'MEDIUM' ? 1.4 : 1.2;
+    
+    userLocationMarker = new mapboxgl.Marker({
+        color: riskConfig.color,
+        scale: markerScale
+    })
+        .setLngLat([longitude, latitude])
+        .setPopup(new mapboxgl.Popup({
+            offset: 25,
+            maxWidth: "280px",
+            anchor: "bottom",
+            closeButton: true,
+            className: 'risk-analysis-popup-3d'
+        }).setHTML(createRiskPopupContent(riskData)))
+        .addTo(map3d);
+
+    // Open popup automatically with animation
+    setTimeout(() => {
+        userLocationMarker.getPopup().addTo(map3d);
+    }, 300);
+
+    // Add 3D risk visualization if available
+    if (riskData && map3d && isMap3dInitialized) {
+        add3DRiskZone(latitude, longitude, riskData);
+    }
+}
+
+// Get risk configuration (colors, labels, etc.)
+function getRiskConfig(riskLevel) {
+    switch (riskLevel) {
+        case 'HIGH':
+            return {
+                color: '#e74c3c',
+                label: 'High Risk',
+                bgColor: '#e74c3c20',
+                borderColor: '#e74c3c'
+            };
+        case 'MEDIUM':
+            return {
+                color: '#f39c12',
+                label: 'Medium Risk',
+                bgColor: '#f39c1220',
+                borderColor: '#f39c12'
+            };
+        case 'LOW':
+            return {
+                color: '#27ae60',
+                label: 'Low Risk',
+                bgColor: '#27ae6020',
+                borderColor: '#27ae60'
+            };
+        default:
+            return {
+                color: '#95a5a6',
+                label: 'Unknown',
+                bgColor: '#95a5a620',
+                borderColor: '#95a5a6'
+            };
+    }
+}
+
+// Create risk analysis popup content
+function createRiskPopupContent(riskData) {
+    // If no risk data, provide fallback data
+    if (!riskData) {
+        riskData = {
+            ari: 10,
+            riskLevel: 'LOW',
+            cause: 'No accident-prone zones detected nearby'
+        };
+    }
+
+    const riskConfig = getRiskConfig(riskData.riskLevel);
+    
+    return `
+        <div class="ws-popup">
+            <div class="ws-header">
+                <div class="ws-icon" style="background: ${riskConfig.color};">🚦</div>
+                <div>
+                    <h3>Risk Analysis</h3>
+                    <p>Current Location</p>
+                </div>
+            </div>
+            
+            <div class="ws-body" style="background: ${riskConfig.bgColor}; border-left-color: ${riskConfig.borderColor};">
+                <div class="ws-row">
+                    <span class="ws-badge" style="background: ${riskConfig.color};">${riskConfig.label}</span>
+                    <div class="ws-ari">
+                        <div class="ws-ari-value" style="color: ${riskConfig.color};">${riskData.ari.toFixed(1)}</div>
+                        <div class="ws-ari-label">ARI Score</div>
+                    </div>
+                </div>
+                
+                <div class="ws-divider"></div>
+                
+                <div class="ws-cause">
+                    <strong>🚨 Primary Cause:</strong>
+                    <p>${riskData.cause}</p>
+                </div>
+            </div>
+            
+            <div class="ws-footer">
+                <strong>💡 Safety Tip:</strong> ${getSafetyTip(riskData.riskLevel)}
+            </div>
+            
+            <div class="ws-note">
+                Based on available dataset
+            </div>
+        </div>
+    `;
+}
+
+// Get safety tip based on risk level
+function getSafetyTip(riskLevel) {
+    switch (riskLevel) {
+        case 'HIGH':
+            return 'Exercise extreme caution. Consider alternative routes.';
+        case 'MEDIUM':
+            return 'Stay alert and follow traffic rules carefully.';
+        case 'LOW':
+            return 'Normal conditions. Maintain standard safety precautions.';
+        default:
+            return 'Always drive safely and be aware of surroundings.';
+    }
+}
+
+// Add glowing effect for high risk zones
+function addGlowEffect(circle) {
+    let glowRadius = circle.options.radius;
+    let growing = true;
+    
+    const animate = () => {
+        if (growing) {
+            glowRadius += 1;
+            if (glowRadius >= circle.options.radius + 20) growing = false;
+        } else {
+            glowRadius -= 1;
+            if (glowRadius <= circle.options.radius) growing = true;
+        }
+        
+        circle.setRadius(glowRadius);
+        
+        if (userLocationMarker && userLocationMarker.riskZone === circle) {
+            requestAnimationFrame(animate);
+        }
+    };
+    
+    animate();
+}
+
+// Add 3D risk zone visualization
+function add3DRiskZone(latitude, longitude, riskData) {
+    // This could be extended for 3D risk zones
+    console.log('3D risk zone added for:', riskData);
+}
+
+// Show location error with user-friendly message
+function showLocationError(message) {
+    // Create a more user-friendly error display
+    const errorDiv = document.createElement('div');
+    errorDiv.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        max-width: 300px;
+        font-size: 14px;
+        animation: slideIn 0.3s ease-out;
+    `;
+    errorDiv.innerHTML = `
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 20px; margin-right: 10px;">⚠️</span>
+            <strong>Location Error</strong>
+        </div>
+        <div style="margin-bottom: 10px;">${message}</div>
+        <button onclick="this.parentElement.remove()" style="
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        ">Dismiss</button>
+    `;
+
+    // Add animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
+
+    document.body.appendChild(errorDiv);
+
+    // Auto-remove after 8 seconds
+    setTimeout(() => {
+        if (errorDiv.parentElement) {
+            errorDiv.remove();
+        }
+    }, 8000);
+}
+
+// Update Analytics for Error State
+function updateAnalyticsForError() {
+    // Update analytics sidebar to show connection error
+    const totalElement = document.getElementById('totalBlackspots');
+    const highElement = document.getElementById('highRiskZones');
+    const mediumElement = document.getElementById('mediumRiskZones');
+    const lowElement = document.getElementById('lowRiskZones');
+    
+    if (totalElement) totalElement.textContent = '---';
+    if (highElement) highElement.textContent = '---';
+    if (mediumElement) mediumElement.textContent = '---';
+    if (lowElement) lowElement.textContent = '---';
+    
+    // Clear the chart if it exists
+    const ctx = document.getElementById('riskChart');
+    if (ctx && riskChart) {
+        riskChart.destroy();
+        riskChart = null;
+    }
+}
+
 // Show Error Message
 function showErrorMessage() {
     const mapContainer = document.getElementById('map2d');
     if (mapContainer) {
         mapContainer.innerHTML = `
-            <div class="loading">
-                <div>
-                    <div class="loading-spinner"></div>
-                    <p style="margin-top: 20px; color: #e74c3c; font-weight: 600;">
-                        ❌ Unable to load data. Please check your backend connection.
-                    </p>
-                    <p style="margin-top: 10px; color: #7f8c8d;">
-                        Make sure the Spring Boot server is running on localhost:8080
-                    </p>
+            <div class="loading" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <div style="text-align: center; padding: 40px;">
+                    <div style="font-size: 80px; margin-bottom: 20px;">🔌</div>
+                    <h2 style="color: white; margin-bottom: 20px; font-size: 28px;">
+                        Backend Connection Required
+                    </h2>
+                    <div style="background: rgba(231, 76, 60, 0.9); color: white; padding: 15px; border-radius: 10px; margin: 20px 0; font-weight: 600;">
+                        ❌ Cannot connect to backend server at localhost:8080
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.9); color: #2c3e50; padding: 20px; border-radius: 10px; margin: 20px 0; text-align: left;">
+                        <h3 style="margin-top: 0; color: #e74c3c;">🚀 Quick Start Steps:</h3>
+                        <ol style="margin: 10px 0; padding-left: 20px;">
+                            <li><strong>Navigate to backend folder:</strong><br>
+                            <code style="background: #f8f9fa; padding: 2px 6px; border-radius: 3px;">cd roadsafety</code></li>
+                            <li><strong>Start the backend server:</strong><br>
+                            <code style="background: #f8f9fa; padding: 2px 6px; border-radius: 3px;">mvn spring-boot:run</code></li>
+                            <li><strong>Wait for server to start (look for "Started RoadsafetyApplication")</strong></li>
+                            <li><strong>Refresh this page</strong></li>
+                        </ol>
+                        <p style="margin: 15px 0; color: #7f8c8d;"><strong>💡 Tip:</strong> Make sure Java 17+ and Maven are installed</p>
+                    </div>
+                    <button onclick="location.reload()" style="background: #27ae60; color: white; border: none; padding: 12px 30px; border-radius: 25px; font-size: 16px; cursor: pointer; margin-top: 10px;">
+                        🔄 Retry Connection
+                    </button>
                 </div>
             </div>
         `;
     }
+    
+    // Also update analytics to show error state
+    updateAnalyticsForError();
 }
 
 // Show Mapbox Error
